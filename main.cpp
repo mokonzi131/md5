@@ -6,6 +6,9 @@
 #include <array>
 #include <istream>
 #include <fstream>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 
 template<std::integral T>
 constexpr T byteswap(T value) noexcept
@@ -95,6 +98,7 @@ public:
 
             // 1. pad the message to 448 % 512 bits
             if (bitsRead > 448) { break; }
+            [[fallthrough]];
         }
         case BlockLoadState::PAD: {
             // 2. append the length b bits into the remaining 2 words, low-order word first
