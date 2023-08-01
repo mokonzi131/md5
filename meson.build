@@ -7,5 +7,9 @@ project(
     meson_version: '>=1.0.1',
     version: '0.1.0')
 
-sources = ['main.cpp']
-executable('md5', sources: sources)
+incdir = include_directories('inc')
+sources = [
+    'src/blockloader.cpp', 
+    'src/main.cpp'
+]
+executable('md5', sources: sources, include_directories: incdir)

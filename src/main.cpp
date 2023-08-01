@@ -9,25 +9,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include "inc/types.h"
+#include "inc/bit.h"
+#include "inc/blockloader.h"
 
-template<std::integral T>
-constexpr T byteswap(T value) noexcept
-{
-    static_assert(std::has_unique_object_representations_v<T>, 
-                  "T may not have padding bits");
-    auto value_representation = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
-    std::ranges::reverse(value_representation);
-    return std::bit_cast<T>(value_representation);
-}
-
-using hword = uint32_t;
-static constexpr uint64_t HIGH_32_MASK = 0x00'00'00'00'FF'FF'FF'FF;
-static constexpr hword HW0 = 0x00'00'00'00;
-static constexpr hword A0 = 0x01'23'45'67;
-static constexpr hword B0 = 0x89'ab'cd'ef;
-static constexpr hword C0 = 0xfe'dc'ba'98;
-static constexpr hword D0 = 0x76'54'32'10;
-
+// the md5 spec uses a table of results from the sine function
+// rather than hard-coding the values, we can actually generate them
 static constexpr hword hsine(size_t i) { return static_cast<hword>(4294967296 * std::abs(std::sin(i))); }
 static const hword sineT[65] = {
     hsine(0), hsine(1), hsine(2), hsine(3), hsine(4), hsine(5), hsine(6), hsine(7),
@@ -41,6 +28,7 @@ static const hword sineT[65] = {
     hsine(64)
 };
 
+// auxilary functions defined in the spec
 static hword auxF(hword x, hword y, hword z) {
     // XY v not(X) Z
     return (x & y) | (~x & z);
@@ -61,87 +49,18 @@ static hword auxI(hword x, hword y, hword z) {
     return y ^ (x | ~z);
 }
 
-class BlockLoader {
-public:
-    BlockLoader(std::istream& in) : m_in{ in } {}
-
-    bool hasMoreData() { return m_processingState != BlockLoadState::DONE; }
-
-    void loadNextChunk(std::array<hword, 16>& block) {
-        // clear the block of data
-        std::memset(&block, 0x00, BUFFER_BYTES);
-        std::memset(&m_inputBuffer, '\0', BUFFER_BYTES);
-
-        switch (m_processingState) {
-        case BlockLoadState::READ: {
-            // read next chunk from the stream and tanspose into block
-            m_in.read(m_inputBuffer, BUFFER_BYTES);
-            auto charsRead = m_in.gcount();
-            auto bitsRead = 8 * charsRead;
-            m_messageSize += bitsRead;
-            auto wordsToProcess = charsRead / sizeof(hword);
-            for (size_t processedWords = 0; processedWords < wordsToProcess; processedWords++) {
-                auto nextWord = HW0;
-                std::memcpy(&nextWord, &m_inputBuffer[processedWords * sizeof(hword)], sizeof(hword));
-                std::memcpy(&block[processedWords], &nextWord, sizeof(hword));
-            }
-
-            // handle padding byte if we are on the last word of the input
-            // we append a single 1 and then all 0s until the length is correct
-            auto remainingBytesToProcess = charsRead % sizeof(hword);
-            if (remainingBytesToProcess > 0 || m_in.eof()) {
-                hword padWord = byteswap(std::rotr(0x80'00'00'00, 8 * remainingBytesToProcess));
-                std::memcpy(&padWord, &m_inputBuffer[wordsToProcess * sizeof(hword)], remainingBytesToProcess);
-                std::memcpy(&block[wordsToProcess], &padWord, sizeof(hword));
-                m_processingState = BlockLoadState::PAD;
-            }
-
-            // 1. pad the message to 448 % 512 bits
-            if (bitsRead > 448) { break; }
-            [[fallthrough]];
-        }
-        case BlockLoadState::PAD: {
-            // 2. append the length b bits into the remaining 2 words, low-order word first
-            // now we have N words labeled M[0 ... N-1], message M is a multiple of 16 32-bit words
-            auto sizeHigh = static_cast<hword>((m_messageSize >> 32) & HIGH_32_MASK);
-            auto sizeLow = static_cast<hword>(m_messageSize & HIGH_32_MASK);
-
-            // copy the next hword to the block
-            std::memcpy(&block[14], &sizeLow, sizeof(hword));
-            std::memcpy(&block[15], &sizeHigh, sizeof(hword));
-
-            m_processingState = BlockLoadState::DONE;
-
-            break;
-        }
-        case BlockLoadState::DONE:
-            throw std::logic_error{ "you should not be loading a chunk when done" };
-        }
-    }
-
-private:
-    static constexpr size_t BUFFER_BYTES = 16 * sizeof(hword);
-
-    enum class BlockLoadState { READ, PAD, DONE };
-
-    BlockLoadState m_processingState = BlockLoadState::READ;
-    char m_inputBuffer[BUFFER_BYTES] = {};
-    uint64_t m_messageSize = 0;
-    std::istream& m_in;
-};
-
 int main() {
-    // 0. init stuff
+    // Step 0. init input
     std::ifstream data{ "data.txt", std::ios::binary };
     BlockLoader loader{ data };
 
-    // 3. initialize MD buffer which is ABCD 32-bit words (low-order bits first)
+    // Step 3. initialize MD buffer which is ABCD 32-bit words (low-order bits first)
     hword A = byteswap(A0);
     hword B = byteswap(B0);
     hword C = byteswap(C0);
     hword D = byteswap(D0);
 
-    // 4. process the message in 16-word blocks (512 bits)
+    // Step 4. process the message in 16-word blocks (512 bits)
     std::array<hword, 16> block;
     while (loader.hasMoreData()) {
         loader.loadNextChunk(block);
@@ -194,7 +113,7 @@ int main() {
         D = D + DD;
     }
 
-    // 5. Output message, low order byte of A to high order byte of D
+    // Step 5. Output message, low order byte of A to high order byte of D
     std::cout << std::hex 
         << std::setw(8) << std::setfill('0') << byteswap(A)
         << std::setw(8) << std::setfill('0') << byteswap(B) 
