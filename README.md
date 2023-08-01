@@ -13,7 +13,7 @@ I have included a [meson](https://mesonbuild.com) build file although it should 
 1. `meson setup <builddir>`
 2. `meson compile -C <builddir>`
 
-Currently when you run the program, it will hash the contents of `data.txt` although I plan to make it a bit more flexible in the future.
+When you run the program, it expects a single argument which should be the name of the file whos contents you want to process.
 
 You can verify results with `md5sum` which is available on most *nix systems.
 
