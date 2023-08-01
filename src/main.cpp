@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include "inc/types.h"
 #include "inc/bit.h"
 #include "inc/blockloader.h"
@@ -49,9 +50,14 @@ static hword auxI(hword x, hword y, hword z) {
     return y ^ (x | ~z);
 }
 
-int main() {
+int main(int argc, char** argv) {
     // Step 0. init input
-    std::ifstream data{ "data.txt", std::ios::binary };
+    if (argc != 2) {
+        std::cout << "USAGE: md5 <path> - where path is the file you want to hash\n";
+        return EXIT_FAILURE;
+    }
+    auto file = std::filesystem::path(argv[1]);
+    std::ifstream data{ file.string(), std::ios::binary };
     BlockLoader loader{ data };
 
     // Step 3. initialize MD buffer which is ABCD 32-bit words (low-order bits first)
