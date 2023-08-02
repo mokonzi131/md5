@@ -17,3 +17,16 @@ executable(
     'md5', 
     sources: sources + ['src/main.cpp'], 
     include_directories: incdir)
+
+# tests
+catch = dependency('catch2-with-main', version: '3.4.0')
+md5test = executable(
+    'md5test',
+    sources: sources + ['src/test.cpp'], 
+    include_directories: incdir, 
+    dependencies: catch)
+test(
+    'MD5 Tests', 
+    md5test, 
+    args: ['-r', 'tap'], 
+    protocol: 'tap')
